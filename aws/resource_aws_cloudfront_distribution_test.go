@@ -2787,64 +2787,64 @@ resource "aws_cloudfront_distribution" "test" {
 
 func originShieldItem(enabled, region string) string {
 	return fmt.Sprintf(`
-      origin_shield {
-        enabled              = %s
-        origin_shield_region = %s
-      }
+origin_shield {
+  enabled              = %s
+  origin_shield_region = %s
+}
 `, enabled, region)
 }
 
 func testAccAWSCloudFrontDistributionOriginItem(item string) string {
 	ri := acctest.RandInt()
 	return fmt.Sprintf(`
-  variable rand_id {
-    default = %d
+variable rand_id {
+  default = %d
+}
+
+# origin bucket
+%s
+
+resource "aws_cloudfront_distribution" "test" {
+  origin {
+    domain_name = "${aws_s3_bucket.s3_bucket_origin.id}.s3.amazonaws.com"
+    origin_id   = "myOrigin"
+
+    %s
   }
 
-  # origin bucket
-  %s
+  enabled = true
 
-  resource "aws_cloudfront_distribution" "test" {
-    origin {
-      domain_name = "${aws_s3_bucket.s3_bucket_origin.id}.s3.amazonaws.com"
-      origin_id   = "myOrigin"
+  default_cache_behavior {
+    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "myOrigin"
 
-      %s
-    }
+    forwarded_values {
+      query_string = false
 
-    enabled = true
-
-    default_cache_behavior {
-      allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-      cached_methods   = ["GET", "HEAD"]
-      target_origin_id = "myOrigin"
-
-      forwarded_values {
-        query_string = false
-
-        cookies {
-          forward = "none"
-        }
-      }
-
-      viewer_protocol_policy = "allow-all"
-      min_ttl                = 0
-      default_ttl            = 3600
-      max_ttl                = 86400
-    }
-
-    price_class = "PriceClass_200"
-
-    restrictions {
-      geo_restriction {
-        restriction_type = "whitelist"
-        locations        = ["US", "CA", "GB", "DE"]
+      cookies {
+        forward = "none"
       }
     }
 
-    viewer_certificate {
-      cloudfront_default_certificate = true
+    viewer_protocol_policy = "allow-all"
+    min_ttl                = 0
+    default_ttl            = 3600
+    max_ttl                = 86400
+  }
+
+  price_class = "PriceClass_200"
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "whitelist"
+      locations        = ["US", "CA", "GB", "DE"]
     }
   }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
+}
 `, ri, originBucket, item)
 }

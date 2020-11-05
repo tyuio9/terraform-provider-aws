@@ -433,7 +433,7 @@ argument should not be specified.
     custom origin.
 
 * `origin_shield` - The [CloudFront Origin Shield](#origin-shield-arguments)
-    configuration information. Using Origin Shield can help reduce the load on your origin. For more information, see [Using Origin Shield](#https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/origin-shield.html) in the Amazon CloudFront Developer Guide.
+    configuration information. Using Origin Shield can help reduce the load on your origin. For more information, see [Using Origin Shield](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/origin-shield.html) in the Amazon CloudFront Developer Guide.
 
 * `s3_origin_config` - The [CloudFront S3 origin](#s3-origin-config-arguments)
     configuration information. If a custom origin is required, use
