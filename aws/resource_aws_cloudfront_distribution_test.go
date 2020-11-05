@@ -309,7 +309,104 @@ func TestAccAWSCloudFrontDistribution_Origin_EmptyOriginID(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config:      testAccAWSCloudFrontDistributionConfig_Origin_EmptyOriginID,
-				ExpectError: regexp.MustCompile(`origin_id must not be empty`),
+				ExpectError: regexp.MustCompile(`origin.0.origin_id must not be empty`),
+			},
+		},
+	})
+}
+
+func TestAccAWSCloudFrontDistribution_Origin_ConnectionAttempts(t *testing.T) {
+	var distribution cloudfront.Distribution
+	resourceName := "aws_cloudfront_distribution.test"
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheck(t); testAccPartitionHasServicePreCheck("cloudfront", t) },
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckCloudFrontDistributionDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccAWSCloudFrontDistributionOriginItem(`connection_attempts = 0`),
+				ExpectError: regexp.MustCompile(`expected origin.0.connection_attempts to be in the range`),
+			},
+			{
+				Config:      testAccAWSCloudFrontDistributionOriginItem(`connection_attempts = 4`),
+				ExpectError: regexp.MustCompile(`expected origin.0.connection_attempts to be in the range`),
+			},
+			{
+				Config: testAccAWSCloudFrontDistributionOriginItem(`connection_attempts = 2`),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckCloudFrontDistributionExists(resourceName, &distribution),
+					resource.TestCheckResourceAttr(resourceName, "origin.#", "1"),
+					resource.TestCheckResourceAttr(resourceName, "origin.0.connection_attempts", `2`),
+				),
+			},
+		},
+	})
+}
+
+func TestAccAWSCloudFrontDistribution_Origin_ConnectionTimeout(t *testing.T) {
+	var distribution cloudfront.Distribution
+	resourceName := "aws_cloudfront_distribution.test"
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheck(t); testAccPartitionHasServicePreCheck("cloudfront", t) },
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckCloudFrontDistributionDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccAWSCloudFrontDistributionOriginItem(`connection_timeout = 0`),
+				ExpectError: regexp.MustCompile(`expected origin.0.connection_timeout to be in the range`),
+			},
+			{
+				Config:      testAccAWSCloudFrontDistributionOriginItem(`connection_timeout = 11`),
+				ExpectError: regexp.MustCompile(`expected origin.0.connection_timeout to be in the range`),
+			},
+			{
+				Config: testAccAWSCloudFrontDistributionOriginItem(`connection_timeout = 6`),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckCloudFrontDistributionExists(resourceName, &distribution),
+					resource.TestCheckResourceAttr(resourceName, "origin.#", "1"),
+					resource.TestCheckResourceAttr(resourceName, "origin.0.connection_timeout", `6`),
+				),
+			},
+		},
+	})
+}
+
+func TestAccAWSCloudFrontDistribution_Origin_OriginShield(t *testing.T) {
+	var distribution cloudfront.Distribution
+	resourceName := "aws_cloudfront_distribution.test"
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheck(t); testAccPartitionHasServicePreCheck("cloudfront", t) },
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckCloudFrontDistributionDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccAWSCloudFrontDistributionOriginItem(originShieldItem(`null`, `"us-east-1"`)),
+				ExpectError: regexp.MustCompile(`Required attribute is not set`),
+			},
+			{
+				Config:      testAccAWSCloudFrontDistributionOriginItem(originShieldItem(`false`, `null`)),
+				ExpectError: regexp.MustCompile(`Required attribute is not set`),
+			},
+			{
+				Config:      testAccAWSCloudFrontDistributionOriginItem(originShieldItem(`true`, `null`)),
+				ExpectError: regexp.MustCompile(`Required attribute is not set`),
+			},
+			{
+				Config:      testAccAWSCloudFrontDistributionOriginItem(originShieldItem(`false`, `""`)),
+				ExpectError: regexp.MustCompile(`.*must be a valid AWS Region Code \(eg\. us\-east\-1\).*`),
+			},
+			{
+				Config:      testAccAWSCloudFrontDistributionOriginItem(originShieldItem(`true`, `"US East (Ohio)"`)),
+				ExpectError: regexp.MustCompile(`.*must be a valid AWS Region Code \(eg\. us\-east\-1\).*`),
+			},
+			{
+				Config: testAccAWSCloudFrontDistributionOriginItem(originShieldItem(`true`, `"us-east-1"`)),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckCloudFrontDistributionExists(resourceName, &distribution),
+					resource.TestCheckResourceAttr(resourceName, "origin.#", "1"),
+					resource.TestCheckResourceAttr(resourceName, "origin.0.origin_shield.0.enabled", `true`),
+					resource.TestCheckResourceAttr(resourceName, "origin.0.origin_shield.0.origin_shield_region", "us-east-1"),
+				),
 			},
 		},
 	})
@@ -1152,7 +1249,6 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
         forward = "none"
       }
     }
-
     viewer_protocol_policy = "allow-all"
     min_ttl                = 0
     default_ttl            = 3600
@@ -2687,4 +2783,68 @@ resource "aws_cloudfront_distribution" "test" {
   }
 }
 `, enabled, waitForDeployment)
+}
+
+func originShieldItem(enabled, region string) string {
+	return fmt.Sprintf(`
+      origin_shield {
+        enabled              = %s
+        origin_shield_region = %s
+      }
+`, enabled, region)
+}
+
+func testAccAWSCloudFrontDistributionOriginItem(item string) string {
+	ri := acctest.RandInt()
+	return fmt.Sprintf(`
+  variable rand_id {
+    default = %d
+  }
+
+  # origin bucket
+  %s
+
+  resource "aws_cloudfront_distribution" "test" {
+    origin {
+      domain_name = "${aws_s3_bucket.s3_bucket_origin.id}.s3.amazonaws.com"
+      origin_id   = "myOrigin"
+
+      %s
+    }
+
+    enabled = true
+
+    default_cache_behavior {
+      allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+      cached_methods   = ["GET", "HEAD"]
+      target_origin_id = "myOrigin"
+
+      forwarded_values {
+        query_string = false
+
+        cookies {
+          forward = "none"
+        }
+      }
+
+      viewer_protocol_policy = "allow-all"
+      min_ttl                = 0
+      default_ttl            = 3600
+      max_ttl                = 86400
+    }
+
+    price_class = "PriceClass_200"
+
+    restrictions {
+      geo_restriction {
+        restriction_type = "whitelist"
+        locations        = ["US", "CA", "GB", "DE"]
+      }
+    }
+
+    viewer_certificate {
+      cloudfront_default_certificate = true
+    }
+  }
+`, ri, originBucket, item)
 }
